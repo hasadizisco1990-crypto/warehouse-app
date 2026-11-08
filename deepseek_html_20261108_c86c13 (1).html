@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>استعلام موجودی انبار</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: Tahoma, sans-serif; background-color: #f4f6f8; margin: 0; padding: 15px; text-align: center; }
+        .header { background-color: #1e3a8a; color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .header h2 { margin: 0; font-size: 20px; }
+        #reader { width: 100%; max-width: 400px; margin: 0 auto; border-radius: 10px; overflow: hidden; border: 2px solid #1e3a8a; }
+        .manual-input { margin-top: 15px; display: flex; gap: 10px; justify-content: center; }
+        .manual-input input { padding: 10px; border: 1px solid #ccc; border-radius: 8px; width: 60%; font-family: Tahoma; }
+        .manual-input button { padding: 10px 20px; background-color: #1e3a8a; color: white; border: none; border-radius: 8px; cursor: pointer; font-family: Tahoma; }
+        .result-card { background: white; border-radius: 12px; padding: 20px; margin-top: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: none; text-align: right; }
+        .result-card.show { display: block; }
+        .result-row { display: flex; justify-content: space-between; border-bottom: 1px solid #eee; padding: 10px 0; font-size: 16px; }
+        .result-row:last-child { border-bottom: none; }
+        .result-label { color: #555; font-weight: bold; }
+        .result-value { color: #1e3a8a; font-weight: bold; }
+        .stock-value { font-size: 24px; color: #16a34a; }
+        .error-msg { background-color: #fee2e2; color: #dc2626; padding: 15px; border-radius: 8px; margin-top: 20px; display: none; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h2>سیستم استعلام موجودی انبار</h2>
+        <p style="margin: 5px 0 0 0; font-size: 14px;">QR کالا را اسکن کنید</p>
+    </div>
+
+    <div id="reader"></div>
+
+    <div class="manual-input">
+        <input type="text" id="manualCode" placeholder="یا کد کالا را دستی وارد کنید">
+        <button onclick="searchProduct(document.getElementById('manualCode').value)">جستجو</button>
+    </div>
+
+    <div id="errorMsg" class="error-msg">کالا با این کد در سیستم یافت نشد!</div>
+
+    <div id="resultCard" class="result-card">
+        <div class="result-row">
+            <span class="result-label">کد کالا:</span>
+            <span class="result-value" id="resCode">-</span>
+        </div>
+        <div class="result-row">
+            <span class="result-label">شرح کالا:</span>
+            <span class="result-value" id="resName">-</span>
+        </div>
+        <div class="result-row">
+            <span class="result-label">محل انبار (لوکیشن):</span>
+            <span class="result-value" id="resLocation">-</span>
+        </div>
+        <div class="result-row">
+            <span class="result-label">موجودی:</span>
+            <span class="result-value stock-value"><span id="resQuantity">0</span> <span id="resUnit"></span></span>
+        </div>
+    </div>
+
+    <script>
+        // ========================================================
+        // ⚠️ فقط این یک خط را تغییر دهید ⚠️
+        // ========================================================
+        // کلید anon (Legacy) خود را جایگزین کنید:
+        const SUPABASE_ANON_KEY = "YOUR_ANON_KEY_HERE"; 
+
+        // این آدرس درست است، آن را تغییر ندهید.
+        const SUPABASE_URL = "https://qkmzuiyqdakjvpdxfpie.supabase.co";
+
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        async function searchProduct(scannedCode) {
+            document.getElementById('resultCard').classList.remove('show');
+            document.getElementById('errorMsg').style.display = 'none';
+
+            if (!scannedCode) return;
+
+            let code = scannedCode.trim();
+            if (code.includes('/')) { code = code.split('/').pop(); }
+
+            code = code.padStart(6, '0');
+
+            const { data, error } = await supabase
+                .from('products')
+                .select('*')
+                .eq('code', code)
+                .single();
+
+            if (error || !data) {
+                document.getElementById('errorMsg').style.display = 'block';
+            } else {
+                document.getElementById('resCode').innerText = data.code;
+                document.getElementById('resName').innerText = data.name;
+                document.getElementById('resLocation').innerText = data.location || 'نامشخص';
+                document.getElementById('resQuantity').innerText = data.quantity;
+                document.getElementById('resUnit').innerText = data.unit;
+                document.getElementById('resultCard').classList.add('show');
+            }
+        }
+
+        const html5QrCode = new Html5Qrcode("reader");
+        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+        Html5Qrcode.getCameras().then(devices => {
+            if (devices && devices.length) {
+                html5QrCode.start(
+                    { facingMode: "environment" }, 
+                    config,
+                    (decodedText) => {
+                        searchProduct(decodedText);
+                        html5QrCode.pause(true);
+                        setTimeout(() => { html5QrCode.resume(); }, 2000);
+                    },
+                    (errorMessage) => {}
+                ).catch(err => {
+                    document.getElementById('reader').innerHTML = "<p style='color:red; padding:20px;'>خطا در دسترسی به دوربین.</p>";
+                });
+            }
+        }).catch(err => {
+            document.getElementById('reader').innerHTML = "<p style='color:red; padding:20px;'>دوربینی یافت نشد.</p>";
+        });
+    </script>
+</body>
+</html>
